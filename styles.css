@@ -1,0 +1,157 @@
+body { margin: 0; font-family: Arial, sans-serif; }
+#app { display: flex; height: 100vh; }
+#toolbar { width: 200px; padding: 10px; background-color: #f0f0f0; }
+#canvas-container { flex-grow: 1; position: relative; }
+#canvas { display: block; }
+#status-bar { position: absolute; bottom: 0; left: 0; right: 0; background-color: #e0e0e0; padding: 5px; }
+.tool-button { 
+    display: block; 
+    width: 40px; 
+    height: 40px; 
+    margin-bottom: 10px; 
+    padding: 5px; 
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    cursor: pointer;
+    position: relative;
+    overflow: visible; /* Allow tooltip to overflow */
+}
+.tool-button:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #333;
+    color: #fff;
+    padding: 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    z-index: 1;
+    margin-left: 10px; /* Add some space between button and tooltip */
+}
+#help-panel { position: absolute; top: 10px; right: 10px; background-color: rgba(255,255,255,0.8); padding: 10px; border-radius: 5px; }
+#shapes-submenu { display: none; margin-left: 20px; }
+#navigation-instructions {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background-color: rgba(255,255,255,0.8);
+    padding: 10px;
+    border-radius: 5px;
+}
+#right-buttons {
+    position: absolute;
+    top: 10px;
+    left: 10px; /* Changed from right to left */
+    display: flex;
+    flex-direction: column;
+}
+#home-view-btn, #move-btn {
+    display: none; /* Hide by default */
+    width: 40px;
+    height: 40px;
+    background-color: #ffffff; /* Change to white */
+    border: 2px solid #333;
+    border-radius: 5px;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 10px;
+}
+
+/* Add this new style for the button icons */
+#home-view-btn svg, #move-btn svg {
+    fill: #333; /* This will make the icon inside the button dark */
+}
+
+#home-view-icon {
+    width: 24px;
+    height: 24px;
+    display: inline-block;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="%23333"/></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+#left-buttons {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+}
+#credit {
+    color: #333;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+#polygon-icon {
+    width: 24px;
+    height: 24px;
+    display: inline-block;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 1L1 3V21L3 23H21L23 21V3L21 1H3Z M3 3H21V21H3V3Z" fill="none" stroke="black" stroke-width="2"/></svg>');
+    background-size: contain;
+    vertical-align: middle;
+}
+
+#shape-buttons {
+    margin-left: 20px;
+}
+
+#shape-buttons .tool-button {
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.button-container {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.button-container button {
+  margin-bottom: 10px;
+}
+
+#vertex-edit-btn, #move-btn {
+    display: none; /* Hide by default */
+}
+/* Add this to your existing styles */
+#move-mode-instructions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(255,255,255,0.8);
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 14px;
+    display: none; /* Hide by default */
+}
+
+/* Update this existing rule to include the new button */
+#vertex-edit-btn, #move-btn {
+    display: none; /* Hide by default */
+}
+
+/* Add this new rule for the vertex markers */
+.vertex-marker {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: red;
+    pointer-events: none;
+}
+
+/* Add or update this style for the extrude button */
+#extrudeBtn svg {
+    width: 24px;
+    height: 24px;
+}
+
+#extrudeBtn:hover svg path {
+    fill: #0056b3;
+}
