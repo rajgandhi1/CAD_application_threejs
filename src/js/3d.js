@@ -94,7 +94,9 @@ function switchTo3DMode() {
         ONE: THREE.TOUCH.ROTATE,
         TWO: THREE.TOUCH.DOLLY_PAN
     };
-    controls.target.copy(objectCenter);
+    // controls.target.copy(objectCenter);
+    controls.target.set(0, 0, 0);
+    controls.update();
 
     // Update toolbar
     const toolbar = document.getElementById('toolbar');
@@ -361,34 +363,16 @@ function moveVertex(delta) {
     const vertexGroup = selectedVertex.group;
     const positionAttribute = extrudedShape.geometry.attributes.position;
 
-    // Check if the move is within bounds for all vertices in the group
-    let isWithinBounds = true;
-    vertexGroup.forEach(index => {
-        const newX = positionAttribute.getX(index) + delta.x;
-        const newY = positionAttribute.getY(index) + delta.y;
-        const newZ = positionAttribute.getZ(index) + delta.z;
-        
-        const worldPosition = new THREE.Vector3(newX, newY, newZ).applyMatrix4(extrudedShape.matrixWorld);
-        
-        if (!isWithinGridBounds(worldPosition)) {
-            isWithinBounds = false;
-        }
-    });
+    // Move the entire group of vertices
+    moveGroupedVertex(vertexGroup, delta);
 
-    if (isWithinBounds) {
-        // Move the entire group of vertices
-        moveGroupedVertex(vertexGroup, delta);
+    // Update the geometry
+    extrudedShape.geometry.computeBoundingSphere();
+    extrudedShape.geometry.computeBoundingBox();
+    extrudedShape.geometry.attributes.position.needsUpdate = true;
 
-        // Update the geometry
-        extrudedShape.geometry.computeBoundingSphere();
-        extrudedShape.geometry.computeBoundingBox();
-        extrudedShape.geometry.attributes.position.needsUpdate = true;
-
-        // Update vertex markers
-        updateVertexMarkers();
-    } else {
-        console.warn('Vertex movement restricted: Would move outside grid bounds');
-    }
+    // Update vertex markers
+    updateVertexMarkers();
 }
 
 function updateMoveControls() {
@@ -484,6 +468,7 @@ function move3DObject(newPosition) {
         extrudedShape.position.lerp(newPosition, movementSpeed);
         updateGeometryAndMarkers();
     } else {
+        alert('Cannot move object outside the grid'); // Error popup added
         updateStatusBar('Cannot move object outside the grid');
     }
 }
