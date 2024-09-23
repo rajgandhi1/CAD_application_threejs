@@ -8,6 +8,8 @@ let isVertexEditMode = false;
 let vertexMarkers = [];
 let originalMaterial;
 let editModeMaterial;
+let selectedVertex = null;
+let vertexGroups = [];
 
 function startExtrude() {
     const shapes = shapeGroup.children.filter(child => child instanceof THREE.Line);
@@ -94,27 +96,37 @@ function switchTo3DMode() {
     };
     controls.target.copy(objectCenter);
 
-    document.querySelectorAll('#toolbar .tool-button').forEach(btn => btn.style.display = 'none');
-    
-    const rightButtons = document.getElementById('right-buttons');
+    // Update toolbar
+    const toolbar = document.getElementById('toolbar');
     const homeViewBtn = document.getElementById('home-view-btn');
     const moveBtn = document.getElementById('move-btn');
     const vertexEditBtn = document.getElementById('vertex-edit-btn');
 
-    // Move buttons to right-buttons container if they're not already there
-    if (homeViewBtn.parentNode !== rightButtons) {
-        rightButtons.appendChild(homeViewBtn);
-    }
-    if (moveBtn.parentNode !== rightButtons) {
-        rightButtons.appendChild(moveBtn);
-    }
-    if (vertexEditBtn.parentNode !== rightButtons) {
-        rightButtons.appendChild(vertexEditBtn);
-    }
+    // Move buttons to toolbar if they're not already there
+    [homeViewBtn, moveBtn, vertexEditBtn].forEach(btn => {
+        if (btn.parentNode !== toolbar) {
+            toolbar.appendChild(btn);
+        }
+        btn.style.display = 'block';
+        btn.style.marginBottom = '10px'; // Add some vertical spacing
+    });
 
-    homeViewBtn.style.display = 'block';
-    moveBtn.style.display = 'block';
-    vertexEditBtn.style.display = 'block';
+    // Hide other toolbar buttons
+    document.querySelectorAll('#toolbar .tool-button:not(#home-view-btn):not(#move-btn):not(#vertex-edit-btn)').forEach(btn => btn.style.display = 'none');
+
+    // Add creator text
+    let creatorText = document.getElementById('creator-text');
+    if (!creatorText) {
+        creatorText = document.createElement('div');
+        creatorText.id = 'creator-text';
+        creatorText.textContent = 'Created by Raj Gandhi';
+        creatorText.style.position = 'absolute';
+        creatorText.style.bottom = '10px';
+        creatorText.style.left = '10px';
+        creatorText.style.fontSize = '12px';
+        creatorText.style.color = '#666';
+        toolbar.appendChild(creatorText);
+    }
 
     document.getElementById('help-panel').style.display = 'none';
 
@@ -132,13 +144,16 @@ function resetToHomeView() {
 
 function toggleMoveMode() {
     isMoveMode = !isMoveMode;
+    const moveBtn = document.getElementById('move-btn');
     if (isMoveMode) {
+        moveBtn.classList.add('active');
         extrudedShape.material.transparent = true;
         extrudedShape.material.opacity = 0.5;
         extrudedShape.material.color.setHex(0x0000ff);
         controls.enabled = false;
         createMoveControls();
     } else {
+        moveBtn.classList.remove('active');
         extrudedShape.material.transparent = false;
         extrudedShape.material.opacity = 1;
         extrudedShape.material.color.setHex(0x00ff00);
@@ -225,6 +240,21 @@ function onMouseDown3D(event) {
         if (intersects.length > 0) {
             dragStart.copy(intersects[0].point);
         }
+    } else if (isVertexEditMode) {
+        const intersects = getIntersects(event.clientX, event.clientY);
+        if (intersects.length > 0) {
+            const intersectedObject = intersects[0].object;
+            if (intersectedObject.userData && intersectedObject.userData.groupIndex !== undefined) {
+                const groupIndex = intersectedObject.userData.groupIndex;
+                if (vertexGroups[groupIndex]) {
+                    selectedVertex = { marker: intersectedObject, group: vertexGroups[groupIndex] };
+                } else {
+                    console.warn('No group found for the selected vertex');
+                }
+            } else {
+                console.log('Clicked object is not a vertex marker');
+            }
+        }
     }
 }
 
@@ -245,6 +275,119 @@ function onMouseMove3D(event) {
             }
             dragStart.copy(dragEnd);
         }
+    } else if (isVertexEditMode && selectedVertex && event.buttons === 1) {
+        event.preventDefault();
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        raycaster.setFromCamera(mouse, camera);
+
+        const planeNormal = camera.getWorldDirection(new THREE.Vector3());
+        const plane = new THREE.Plane(planeNormal, 0);
+        const intersectionPoint = new THREE.Vector3();
+
+        if (raycaster.ray.intersectPlane(plane, intersectionPoint)) {
+            const worldMatrix = extrudedShape.matrixWorld;
+            const inverseMatrix = new THREE.Matrix4().copy(worldMatrix).invert();
+            
+            const localIntersectionPoint = intersectionPoint.applyMatrix4(inverseMatrix);
+            const localMarkerPosition = selectedVertex.marker.position.clone().applyMatrix4(inverseMatrix);
+            
+            const delta = new THREE.Vector3().subVectors(localIntersectionPoint, localMarkerPosition);
+            
+            moveVertex(delta);
+        }
+    }
+}
+
+function groupUniqueVertices(geometry) {
+    const positionAttribute = geometry.attributes.position;
+    const uniqueVertices = [];
+    const vertexGroups = [];
+
+    for (let i = 0; i < positionAttribute.count; i++) {
+        const vertex = new THREE.Vector3(
+            positionAttribute.getX(i),
+            positionAttribute.getY(i),
+            positionAttribute.getZ(i)
+        );
+
+        let found = false;
+
+        for (let j = 0; j < uniqueVertices.length; j++) {
+            if (vertex.distanceTo(uniqueVertices[j]) < 0.01) {
+                vertexGroups[j].push(i);
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            uniqueVertices.push(vertex);
+            vertexGroups.push([i]);
+        }
+    }
+
+    return vertexGroups;
+}
+
+function moveGroupedVertex(group, delta) {
+    const positionAttribute = extrudedShape.geometry.attributes.position;
+
+    // Move all vertices in the group by the same delta
+    group.forEach(index => {
+        positionAttribute.setXYZ(
+            index,
+            positionAttribute.getX(index) + delta.x,
+            positionAttribute.getY(index) + delta.y,
+            positionAttribute.getZ(index) + delta.z
+        );
+    });
+
+    // Mark the geometry as needing an update
+    positionAttribute.needsUpdate = true;
+}
+
+function moveVertex(delta) {
+    if (!selectedVertex || !extrudedShape) {
+        console.warn('No vertex selected or extrudedShape not found.');
+        return;
+    }
+
+    const vertexGroup = selectedVertex.group;
+    const positionAttribute = extrudedShape.geometry.attributes.position;
+
+    // Check if the move is within bounds for all vertices in the group
+    let isWithinBounds = true;
+    vertexGroup.forEach(index => {
+        const newX = positionAttribute.getX(index) + delta.x;
+        const newY = positionAttribute.getY(index) + delta.y;
+        const newZ = positionAttribute.getZ(index) + delta.z;
+        
+        const worldPosition = new THREE.Vector3(newX, newY, newZ).applyMatrix4(extrudedShape.matrixWorld);
+        
+        if (!isWithinGridBounds(worldPosition)) {
+            isWithinBounds = false;
+        }
+    });
+
+    if (isWithinBounds) {
+        // Move the entire group of vertices
+        moveGroupedVertex(vertexGroup, delta);
+
+        // Update the geometry
+        extrudedShape.geometry.computeBoundingSphere();
+        extrudedShape.geometry.computeBoundingBox();
+        extrudedShape.geometry.attributes.position.needsUpdate = true;
+
+        // Update vertex markers
+        updateVertexMarkers();
+    } else {
+        console.warn('Vertex movement restricted: Would move outside grid bounds');
     }
 }
 
@@ -336,9 +479,10 @@ function updateNavigationInstructions() {
 }
 
 function move3DObject(newPosition) {
-    const movementSpeed = 0.1; // Adjust this value to change the movement speed
+    const movementSpeed = 0.1;
     if (isWithinGridBounds(newPosition)) {
         extrudedShape.position.lerp(newPosition, movementSpeed);
+        updateGeometryAndMarkers();
     } else {
         updateStatusBar('Cannot move object outside the grid');
     }
@@ -347,7 +491,9 @@ function move3DObject(newPosition) {
 function isWithinGridBounds(position) {
     const gridSize = 1000;  // This should match the size in addGrid() function
     const halfGrid = gridSize / 2;
-    return Math.abs(position.x) <= halfGrid && Math.abs(position.y) <= halfGrid;
+    return Math.abs(position.x) <= halfGrid && 
+           Math.abs(position.y) <= halfGrid &&
+           position.z >= 0 && position.z <= gridSize;  // Assuming the grid goes from 0 to gridSize in Z direction
 }
 
 function getIntersects(x, y, targetPlane) {
@@ -357,7 +503,11 @@ function getIntersects(x, y, targetPlane) {
         -((y - rect.top) / rect.height) * 2 + 1
     );
     raycaster.setFromCamera(mouse, camera);
-    if (targetPlane) {
+    
+    if (isVertexEditMode) {
+        // Check intersections with vertex markers
+        return raycaster.intersectObjects(vertexMarkers);
+    } else if (targetPlane) {
         const intersectPoint = new THREE.Vector3();
         const hasIntersection = raycaster.ray.intersectPlane(targetPlane, intersectPoint);
         return hasIntersection ? [{ point: intersectPoint }] : [];
@@ -371,16 +521,22 @@ function getIntersects(x, y, targetPlane) {
 }
 
 function toggleVertexEditMode() {
+    
     isVertexEditMode = !isVertexEditMode;
+    const vertexEditBtn = document.getElementById('vertex-edit-btn');
+    
     if (isVertexEditMode) {
+        vertexEditBtn.classList.add('active');
         showVertices();
         enterEditMode();
         controls.enabled = false; // Disable orbital controls
     } else {
+        vertexEditBtn.classList.remove('active');
         hideVertices();
         exitEditMode();
         resetOrbitControls(); // Re-enable orbital controls
     }
+    
     updateNavigationInstructions();
 }
 
@@ -404,49 +560,84 @@ function showVertices() {
     if (!extrudedShape) return;
 
     const geometry = extrudedShape.geometry;
+    vertexGroups = groupUniqueVertices(geometry);
+
     const positionAttribute = geometry.getAttribute('position');
-    const vertices = new Set();
 
-    // Collect unique vertices
-    for (let i = 0; i < positionAttribute.count; i++) {
-        const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+    // Create markers for each unique vertex
+    vertexGroups.forEach((group, groupIndex) => {
+        const vertexIndex = group[0]; // Use the first vertex in the group as representative
+        const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, vertexIndex);
         vertex.applyMatrix4(extrudedShape.matrixWorld);
-        vertices.add(`${vertex.x.toFixed(2)},${vertex.y.toFixed(2)},${vertex.z.toFixed(2)}`);
-    }
-
-    // Create markers for unique vertices
-    vertices.forEach(vertexString => {
-        const [x, y, z] = vertexString.split(',').map(Number);
-        const vertex = new THREE.Vector3(x, y, z);
-        const marker = createVertexMarker(vertex);
+        const marker = createVertexMarker(vertex, groupIndex);
         vertexMarkers.push(marker);
-        scene.add(marker); // Add to scene instead of extrudedShape
+        scene.add(marker);
     });
 
-    console.log(`Number of unique vertices: ${vertices.size}`);
+    console.log(`Number of unique vertices: ${vertexGroups.length}`);
+    
+    // Update markers immediately after creation
+    updateVertexMarkers();
 }
 
-function createVertexMarker(position) {
+function createVertexMarker(position, groupIndex) {
     const geometry = new THREE.SphereGeometry(2, 32, 32); // Increased size from 0.5 to 2
     const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
     const marker = new THREE.Mesh(geometry, material);
     marker.position.copy(position);
+
+    // Attach the group index to the marker
+    marker.userData = { groupIndex: groupIndex };
+
     return marker;
 }
 
 function hideVertices() {
-    vertexMarkers.forEach(marker => scene.remove(marker)); // Remove from scene
+    vertexMarkers.forEach(marker => {
+        scene.remove(marker); // Remove from scene
+    });
     vertexMarkers = [];
 }
 
 function updateVertexMarkers() {
-    if (!isVertexEditMode) return;
-    
-    vertexMarkers.forEach(marker => {
-        const localPosition = marker.position.clone().sub(extrudedShape.position);
-        localPosition.applyQuaternion(extrudedShape.quaternion);
-        marker.position.copy(localPosition.add(extrudedShape.position));
+    if (!isVertexEditMode || !extrudedShape) return;
+
+    const positionAttribute = extrudedShape.geometry.attributes.position;
+    const worldMatrix = extrudedShape.matrixWorld;
+
+    vertexGroups.forEach((group, groupIndex) => {
+        const vertexIndex = group[0]; // Use the first vertex in the group as representative
+        const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, vertexIndex);
+        
+        // Apply the object's world transform to the vertex position
+        vertex.applyMatrix4(worldMatrix);
+        
+        const marker = vertexMarkers[groupIndex];
+        if (marker) {
+            marker.position.copy(vertex);
+            
+            // Scale the marker based on the camera distance
+            const distance = camera.position.distanceTo(vertex);
+            const scale = Math.max(distance / 500, 0.1); // Adjusted scaling factor and added minimum scale
+            marker.scale.set(scale, scale, scale);
+        }
+
     });
+}
+
+// Call this function after any transformation of the extrudedShape
+function updateGeometryAndMarkers() {
+    if (!extrudedShape) return;
+
+    // Update the geometry
+    extrudedShape.geometry.computeBoundingSphere();
+    extrudedShape.geometry.computeBoundingBox();
+
+    // Update the world matrix of the extruded shape
+    extrudedShape.updateMatrixWorld(true);
+
+    // Update vertex markers
+    updateVertexMarkers();
 }
 
 function cancelVertexEditMode() {
