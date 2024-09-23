@@ -1,12 +1,15 @@
 function isWithinGridBounds(point) {
     const gridSize = 1000;  // This should match the size in addGrid() function
     const halfGrid = gridSize / 2;
-    return Math.abs(point.x) <= halfGrid && Math.abs(point.y) <= halfGrid;
+    if (Math.abs(point.x) > halfGrid || Math.abs(point.y) > halfGrid) {
+        alert("Cannot draw outside the grid");
+        return false;
+    }
+    return true;
 }
 
 function startDrawing(point) {
     if (!isWithinGridBounds(point)) {
-        updateStatusBar("Cannot start drawing outside the grid");
         return;
     }
     isDrawing = true;
@@ -169,7 +172,6 @@ function addVertexMarker(point) {
 
 function addPolygonPoint(point) {
     if (!isWithinGridBounds(point)) {
-        updateStatusBar("Cannot add point outside the grid");
         return;
     }
     if (isCloseToFirstPoint(point) && vertices.length > 2) {
